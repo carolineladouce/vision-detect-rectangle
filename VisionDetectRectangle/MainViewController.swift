@@ -7,6 +7,7 @@
 
 import UIKit
 import AVFoundation
+import Vision
 
 
 class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate {
@@ -92,9 +93,66 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
     
     
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        //
+        guard let frame = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            debugPrint("Unable to get image from sample buffer")
+            return
+        }
+        self.detectRectangle(in: frame)
+    }
+    
+    
+    private func detectRectangle(in image: CVPixelBuffer) {
+        let request = VNDetectRectanglesRequest(completionHandler:  {(request: VNRequest, error: Error?) in
+            DispatchQueue.main.async {
+                guard let results = request.results as? [VNRectangleObservation] else { return }
+                self.removeBoundingBoxLayer()
+                
+                // Retrieve the first observed rectangle
+                guard let rect = results.first else { return }
+                
+                // Fuction used to draw the bounding box of the detected rectangle
+                self.drawBoundingBox(rect: rect)
+            }
+        })
+        
+        // Set the values for the detected rectangle
+        request.minimumAspectRatio = VNAspectRatio(0.3)
+        request.maximumAspectRatio = VNAspectRatio(0.9)
+        request.minimumSize = Float(0.3)
+        request.maximumObservations = 1
+        
+        let imageRequestHandler = VNImageRequestHandler(cvPixelBuffer: image, options: [:])
+        
+        try? imageRequestHandler.perform([request])
+    }
+    
+    
+    func drawBoundingBox(rect : VNRectangleObservation) {
+        let transform = CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -self.previewLayer.bounds.height)
+        
+        let scale = CGAffineTransform.identity.scaledBy(x: self.previewLayer.bounds.width, y: self.previewLayer.bounds.height)
+        
+        let bounds = rect.boundingBox.applying(scale).applying(transform)
+        
+        createLayer(in: bounds)
+    }
+    
+    
+    private var bBoxLayer = CAShapeLayer()
+    
+    private func createLayer(in rect: CGRect) {
+        bBoxLayer = CAShapeLayer()
+        bBoxLayer.frame = rect
+        bBoxLayer.cornerRadius = 10
+        bBoxLayer.opacity = 1
+        bBoxLayer.borderColor = UIColor.systemBlue.cgColor
+        bBoxLayer.borderWidth = 6.0
+        previewLayer.insertSublayer(bBoxLayer, at: 1)
     }
 
+    func removeBoundingBoxLayer() {
+        bBoxLayer.removeFromSuperlayer()
+    }
 
 }
 
