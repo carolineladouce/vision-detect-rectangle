@@ -9,7 +9,7 @@ import UIKit
 import AVFoundation
 
 
-class MainViewController: UIViewController {
+class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate {
     
     private let captureSession = AVCaptureSession()
     
@@ -38,6 +38,22 @@ class MainViewController: UIViewController {
         self.previewLayer.frame = self.view.frame
     }
     
+    
+    private let videoDataOutput = AVCaptureVideoDataOutput()
+    
+    private func setCameraOutput() {
+        self.videoDataOutput.videoSettings = [(kCVPixelBufferPixelFormatTypeKey as NSString) : NSNumber(value: kCVPixelFormatType_32BGRA)] as [String : Any]
+        
+        self.videoDataOutput.alwaysDiscardsLateVideoFrames = true
+        self.videoDataOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera_frame_processing_queue"))
+        
+        self.captureSession.addOutput(self.videoDataOutput)
+        
+        guard let connection = self.videoDataOutput.connection(with: AVMediaType.video),
+              connection.isVideoOrientationSupported else { return }
+        connection.videoOrientation = .portrait
+    }
+    
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -47,7 +63,11 @@ class MainViewController: UIViewController {
         
         self.setCameraInput()
         self.showCameraFeed()
-        self.captureSession.startRunning()
+        setCameraOutput()
+        //self.captureSession.startRunning()
+        
+        viewDidAppear(true)
+        viewDidDisappear(true)
     }
     
     
@@ -57,6 +77,23 @@ class MainViewController: UIViewController {
     }
     
     
+    override func viewDidAppear(_ animated: Bool) {
+        // Session Start
+        self.videoDataOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera_frame_processing_queue"))
+        self.captureSession.startRunning()
+    }
+    
+    
+    override func viewDidDisappear(_ animated: Bool) {
+        // Session Stop
+        self.videoDataOutput.setSampleBufferDelegate(nil, queue: nil)
+        self.captureSession.stopRunning()
+    }
+    
+    
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        //
+    }
 
 
 }
