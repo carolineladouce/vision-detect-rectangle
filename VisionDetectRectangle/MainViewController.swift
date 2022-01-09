@@ -55,7 +55,7 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
         connection.videoOrientation = .portrait
     }
     
-
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
@@ -149,10 +149,45 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
         bBoxLayer.borderWidth = 6.0
         previewLayer.insertSublayer(bBoxLayer, at: 1)
     }
-
+    
     func removeBoundingBoxLayer() {
         bBoxLayer.removeFromSuperlayer()
     }
-
+    
+    
+    func imageExtraction(_ observation: VNRectangleObservation, from buffer: CVImageBuffer) -> UIImage {
+        var ciImage = CIImage(cvImageBuffer: buffer)
+        
+        let topLeft = observation.topLeft.scaled(to: ciImage.extent.size)
+        let topRight = observation.topRight.scaled(to: ciImage.extent.size)
+        let bottomLeft = observation.bottomLeft.scaled(to: ciImage.extent.size)
+        let bottomRight = observation.bottomRight.scaled(to: ciImage.extent.size)
+        
+        // pass filters to extract/rectify the image
+        ciImage = ciImage.applyingFilter("CIPerscpectiveCorrection", parameters: [
+            "inputTopLeft": CIVector(cgPoint: topLeft),
+            "inputTopRight": CIVector(cgPoint: topRight),
+            "inputBottomLeft": CIVector(cgPoint: bottomLeft),
+            "inputBottomRight": CIVector(cgPoint: bottomRight)
+        ])
+        
+        let context = CIContext()
+        let cgImage = context.createCGImage(ciImage, from: ciImage.extent)
+        let output = UIImage(cgImage: cgImage!)
+        
+        // Return image
+        return output
+    }
+    
+    
+    
+    
 }
 
+
+
+extension CGPoint {
+    func scaled(to size: CGSize) -> CGPoint {
+        return CGPoint(x: self.x * size.width, y: self.y * size.height)
+    }
+}
