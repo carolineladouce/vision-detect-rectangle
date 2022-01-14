@@ -14,46 +14,11 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
     
     private let captureSession = AVCaptureSession()
     
-    private func setCameraInput() {
-        guard let device = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInWideAngleCamera,
-                          .builtInDualCamera,
-                          .builtInTrueDepthCamera],
-            mediaType: .video,
-            position: .back
-        ).devices.first else {
-            fatalError("No back camera device found.")
-        }
-        
-        let cameraInput = try! AVCaptureDeviceInput(device: device)
-        self.captureSession.addInput(cameraInput)
-    }
-    
-    
     private lazy var previewLayer = AVCaptureVideoPreviewLayer(session: self.captureSession)
-    
-    
-    private func showCameraFeed() {
-        self.previewLayer.videoGravity = .resizeAspectFill
-        self.view.layer.addSublayer(self.previewLayer)
-        self.previewLayer.frame = self.view.frame
-    }
-    
     
     private let videoDataOutput = AVCaptureVideoDataOutput()
     
-    private func setCameraOutput() {
-        self.videoDataOutput.videoSettings = [(kCVPixelBufferPixelFormatTypeKey as NSString) : NSNumber(value: kCVPixelFormatType_32BGRA)] as [String : Any]
-        
-        self.videoDataOutput.alwaysDiscardsLateVideoFrames = true
-        self.videoDataOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera_frame_processing_queue"))
-        
-        self.captureSession.addOutput(self.videoDataOutput)
-        
-        guard let connection = self.videoDataOutput.connection(with: AVMediaType.video),
-              connection.isVideoOrientationSupported else { return }
-        connection.videoOrientation = .portrait
-    }
+    private var bBoxLayer = CAShapeLayer()
     
     
     override func viewDidLoad() {
@@ -92,6 +57,43 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
     }
     
     
+    private func setCameraInput() {
+        guard let device = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera,
+                          .builtInDualCamera,
+                          .builtInTrueDepthCamera],
+            mediaType: .video,
+            position: .back
+        ).devices.first else {
+            fatalError("No back camera device found.")
+        }
+        
+        let cameraInput = try! AVCaptureDeviceInput(device: device)
+        self.captureSession.addInput(cameraInput)
+    }
+    
+    
+    private func showCameraFeed() {
+        self.previewLayer.videoGravity = .resizeAspectFill
+        self.view.layer.addSublayer(self.previewLayer)
+        self.previewLayer.frame = self.view.frame
+    }
+    
+    
+    private func setCameraOutput() {
+        self.videoDataOutput.videoSettings = [(kCVPixelBufferPixelFormatTypeKey as NSString) : NSNumber(value: kCVPixelFormatType_32BGRA)] as [String : Any]
+        
+        self.videoDataOutput.alwaysDiscardsLateVideoFrames = true
+        self.videoDataOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera_frame_processing_queue"))
+        
+        self.captureSession.addOutput(self.videoDataOutput)
+        
+        guard let connection = self.videoDataOutput.connection(with: AVMediaType.video),
+              connection.isVideoOrientationSupported else { return }
+        connection.videoOrientation = .portrait
+    }
+    
+    
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let frame = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             debugPrint("Unable to get image from sample buffer")
@@ -127,6 +129,11 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
     }
     
     
+    func removeBoundingBoxLayer() {
+        bBoxLayer.removeFromSuperlayer()
+    }
+    
+    
     func drawBoundingBox(rect : VNRectangleObservation) {
         let transform = CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -self.previewLayer.bounds.height)
         
@@ -138,8 +145,6 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
     }
     
     
-    private var bBoxLayer = CAShapeLayer()
-    
     private func createLayer(in rect: CGRect) {
         bBoxLayer = CAShapeLayer()
         bBoxLayer.frame = rect
@@ -150,19 +155,15 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
         previewLayer.insertSublayer(bBoxLayer, at: 1)
     }
     
-    func removeBoundingBoxLayer() {
-        bBoxLayer.removeFromSuperlayer()
-    }
-    
     
     func imageExtraction(_ observation: VNRectangleObservation, from buffer: CVImageBuffer) -> UIImage {
         var ciImage = CIImage(cvImageBuffer: buffer)
-        
+
         let topLeft = observation.topLeft.scaled(to: ciImage.extent.size)
         let topRight = observation.topRight.scaled(to: ciImage.extent.size)
         let bottomLeft = observation.bottomLeft.scaled(to: ciImage.extent.size)
         let bottomRight = observation.bottomRight.scaled(to: ciImage.extent.size)
-        
+
         // pass filters to extract/rectify the image
         ciImage = ciImage.applyingFilter("CIPerscpectiveCorrection", parameters: [
             "inputTopLeft": CIVector(cgPoint: topLeft),
@@ -170,20 +171,17 @@ class MainViewController: UIViewController, AVCaptureVideoDataOutputSampleBuffer
             "inputBottomLeft": CIVector(cgPoint: bottomLeft),
             "inputBottomRight": CIVector(cgPoint: bottomRight)
         ])
-        
+
         let context = CIContext()
         let cgImage = context.createCGImage(ciImage, from: ciImage.extent)
         let output = UIImage(cgImage: cgImage!)
-        
+
         // Return image
         return output
     }
     
     
-    
-    
 }
-
 
 
 extension CGPoint {
